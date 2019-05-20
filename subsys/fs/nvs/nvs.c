@@ -91,6 +91,10 @@ static int nvs_flash_rd(struct nvs_fs *fs, u32_t addr, void *data,
 	offset += fs->sector_size * (addr >> ADDR_SECT_SHIFT);
 	offset += addr & ADDR_OFFS_MASK;
 
+    LOG_ERR("addr: %x", addr);
+    LOG_ERR("offset: %x", offset);
+    LOG_ERR("sector size: %x", fs->sector_size);
+
 	rc = flash_read(fs->flash_device, offset, data, len);
 	return rc;
 
@@ -542,6 +546,7 @@ static int nvs_startup(struct nvs_fs *fs)
 	k_mutex_lock(&fs->nvs_lock, K_FOREVER);
 
 	ate_size = nvs_al_size(fs, sizeof(struct nvs_ate));
+    LOG_ERR("%d", __LINE__);
 	/* step through the sectors to find the last sector */
 	for (u16_t i = 0; i < fs->sector_count; i++) {
 		addr = (i << ADDR_SECT_SHIFT) + fs->sector_size - ate_size;
@@ -562,6 +567,7 @@ static int nvs_startup(struct nvs_fs *fs)
 		 */
 		nvs_sector_advance(fs, &addr);
 	}
+    LOG_ERR("%d", __LINE__);
 	/* search for the first ate containing all 0xff) */
 	while (1) {
 		addr -= ate_size;
@@ -572,6 +578,7 @@ static int nvs_startup(struct nvs_fs *fs)
 			break;
 		}
 	}
+    LOG_ERR("%d", __LINE__);
 
 	fs->ate_wra = addr;
 	fs->data_wra = addr & ADDR_SECT_MASK;
@@ -592,6 +599,7 @@ static int nvs_startup(struct nvs_fs *fs)
 			fs->data_wra += nvs_al_size(fs, last_ate.len);
 		}
 	}
+    LOG_ERR("%d", __LINE__);
 
 	/* possible data write after last ate write, update data_wra */
 	while (1) {
@@ -608,6 +616,7 @@ static int nvs_startup(struct nvs_fs *fs)
 		}
 		fs->data_wra += fs->write_block_size;
 	}
+    LOG_ERR("%d", __LINE__);
 
 	/* if the sector after the write sector is not empty gc was interrupted
 	 * we need to restart gc, first erase the sector before restarting gc
@@ -617,8 +626,10 @@ static int nvs_startup(struct nvs_fs *fs)
 	nvs_sector_advance(fs, &addr);
 	rc = nvs_flash_cmp_const(fs, addr, 0xff, fs->sector_size);
 	if (rc < 0) {
+        LOG_ERR("flash cmp const rc %d", rc);
 		goto end;
 	}
+    LOG_ERR("%d", __LINE__);
 	if (rc) {
 		/* the sector after fs->ate_wrt is not empty */
 		rc = nvs_flash_erase_sector(fs, fs->ate_wra);
@@ -633,6 +644,7 @@ static int nvs_startup(struct nvs_fs *fs)
 			goto end;
 		}
 	}
+    LOG_ERR("%d", __LINE__);
 
 end:
 	k_mutex_unlock(&fs->nvs_lock);
@@ -700,6 +712,7 @@ int nvs_init(struct nvs_fs *fs, const char *dev_name)
 
 	rc = nvs_startup(fs);
 	if (rc) {
+        LOG_ERR("rc: %d", rc);
 		return rc;
 	}
 
@@ -849,7 +862,6 @@ ssize_t nvs_read_hist(struct nvs_fs *fs, u16_t id, void *data, size_t len,
 
 	wlk_addr = fs->ate_wra;
 	rd_addr = wlk_addr;
-
 	while (cnt_his <= cnt) {
 		rd_addr = wlk_addr;
 		rc = nvs_prev_ate(fs, &wlk_addr, &wlk_ate);
