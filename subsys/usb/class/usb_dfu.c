@@ -58,12 +58,7 @@ LOG_MODULE_REGISTER(usb_dfu);
 
 #define NUMOF_ALTERNATE_SETTINGS	2
 
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-#define USB_DFU_MAX_XFER_SIZE		(MIN(CONFIG_USB_COMPOSITE_BUFFER_SIZE, \
-					     CONFIG_USB_DFU_MAX_XFER_SIZE))
-#else
-#define USB_DFU_MAX_XFER_SIZE		CONFIG_USB_DFU_MAX_XFER_SIZE
-#endif
+#define USB_DFU_MAX_XFER_SIZE		CONFIG_USB_REQUEST_BUFFER_SIZE
 
 #define FIRMWARE_IMAGE_0_LABEL "image-1"
 #define FIRMWARE_IMAGE_1_LABEL "image-0"
@@ -404,9 +399,6 @@ static int dfu_class_handle_req(struct usb_setup_packet *pSetup,
 		/* iString */
 		(*data)[5] = 0U;
 		*data_len = 6;
-		if (dfu_data.state == dfuDNBUSY) {
-			k_work_submit(&dfu_work);
-		}
 		break;
 
 	case DFU_GETSTATE:
@@ -449,8 +441,6 @@ static int dfu_class_handle_req(struct usb_setup_packet *pSetup,
 		switch (dfu_data.state) {
 		case dfuIDLE:
 			LOG_DBG("DFU_DNLOAD start");
-			dfu_data.bwPollTimeout =
-				CONFIG_USB_DFU_DNLOAD_POLLTIMEOUT;
 			dfu_reset_counters();
 			k_poll_signal_reset(&dfu_signal);
 
@@ -466,15 +456,13 @@ static int dfu_class_handle_req(struct usb_setup_packet *pSetup,
 			dfu_data_worker.worker_state = dfuIDLE;
 			dfu_data_worker.worker_len  = pSetup->wLength;
 			memcpy(dfu_data_worker.buf, *data, pSetup->wLength);
-			/* do not submit dfu_work now, wait for DFU_GETSTATUS */
+			k_work_submit(&dfu_work);
 			break;
 		case dfuDNLOAD_IDLE:
 			dfu_data.state = dfuDNBUSY;
 			dfu_data_worker.worker_state = dfuDNLOAD_IDLE;
 			dfu_data_worker.worker_len  = pSetup->wLength;
 			if (dfu_data_worker.worker_len == 0U) {
-				dfu_data.bwPollTimeout =
-					CONFIG_USB_DFU_DEFAULT_POLLTIMEOUT;
 				dfu_data.state = dfuMANIFEST_SYNC;
 				k_poll_signal_raise(&dfu_signal, 0);
 			}
@@ -584,7 +572,7 @@ static int dfu_class_handle_req(struct usb_setup_packet *pSetup,
 
 		/* Set the DFU mode descriptors to be used after reset */
 		dfu_config.usb_device_description = (u8_t *) &dfu_mode_desc;
-		if (usb_set_config(&dfu_config) != 0) {
+		if (usb_set_config(dfu_config.usb_device_description) != 0) {
 			LOG_ERR("usb_set_config failed in DFU_DETACH");
 			return -EIO;
 		}
@@ -718,7 +706,6 @@ USBD_CFG_DATA_DEFINE(dfu) struct usb_cfg_data dfu_config = {
 	.interface = {
 		.class_handler = dfu_class_handle_req,
 		.custom_handler = dfu_custom_handle_req,
-		.payload_data = dfu_data.buffer,
 	},
 	.num_endpoints = 0,
 };
@@ -735,7 +722,6 @@ USBD_CFG_DATA_DEFINE(dfu_mode) struct usb_cfg_data dfu_mode_config = {
 	.interface = {
 		.class_handler = dfu_class_handle_req,
 		.custom_handler = dfu_custom_handle_req,
-		.payload_data = dfu_data.buffer,
 	},
 	.num_endpoints = 0,
 };
@@ -746,11 +732,17 @@ static void dfu_work_handler(struct k_work *item)
 
 	switch (dfu_data_worker.worker_state) {
 	case dfuIDLE:
+/*
+ * If progressive erase is enabled, then erase take place while
+ * image collection, so not erase whole bank at DFU beginning
+ */
+#ifndef CONFIG_IMG_ERASE_PROGRESSIVELY
 		if (boot_erase_img_bank(DT_FLASH_AREA_IMAGE_1_ID)) {
 			dfu_data.state = dfuERROR;
 			dfu_data.status = errERASE;
 			break;
 		}
+#endif
 	case dfuDNLOAD_IDLE:
 		dfu_flash_write(dfu_data_worker.buf,
 				dfu_data_worker.worker_len);
@@ -763,34 +755,12 @@ static void dfu_work_handler(struct k_work *item)
 
 static int usb_dfu_init(struct device *dev)
 {
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	int ret;
-#endif
+	const struct flash_area *fa;
 
 	ARG_UNUSED(dev);
 
 	k_work_init(&dfu_work, dfu_work_handler);
 	k_poll_signal_init(&dfu_signal);
-
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	dfu_config.usb_device_description = usb_get_device_descriptor();
-
-	/* Initialize the USB driver with the right configuration */
-	ret = usb_set_config(&dfu_config);
-	if (ret < 0) {
-		LOG_ERR("Failed to config USB");
-		return ret;
-	}
-
-	/* Enable USB driver */
-	ret = usb_enable(&dfu_config);
-	if (ret < 0) {
-		LOG_ERR("Failed to enable USB");
-		return ret;
-	}
-#endif
-
-	const struct flash_area *fa;
 
 	if (flash_area_open(dfu_data.flash_area_id, &fa)) {
 		return -EIO;

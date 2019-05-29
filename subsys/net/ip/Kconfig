@@ -304,6 +304,15 @@ config NET_UDP_CHECKSUM
 	  Enables UDP handler to check UDP checksum. If the checksum is invalid,
 	  then the packet is discarded.
 
+config NET_UDP_MISSING_CHECKSUM
+	bool "Accept missing checksum (IPv4 only)"
+	depends on NET_UDP && NET_IPV4
+	help
+	  RFC 768 states the possibility to have a missing checksum, for
+	  debugging purposes for instance. That feature is however valid only
+	  for IPv4 and on reception only, since Zephyr will always compute the
+	  UDP checksum in transmission path.
+
 if NET_UDP
 module = NET_UDP
 module-dep = NET_LOG
@@ -320,13 +329,6 @@ config NET_MAX_CONN
 	help
 	  The value depends on your network needs. The value
 	  should include both UDP and TCP connections.
-
-config NET_CONN_CACHE
-	bool "Cache network connections"
-	depends on NET_UDP || NET_TCP
-	help
-	  Caching takes slight more memory but will speedup connection
-	  handling of UDP and TCP connections.
 
 config NET_MAX_CONTEXTS
 	int "Number of network contexts to allocate"

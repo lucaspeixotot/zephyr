@@ -174,13 +174,18 @@ struct uart_event_tx {
 	size_t len;
 };
 
-/** @brief UART RX event data. */
+/**
+ * @brief UART RX event data.
+ *
+ * The data represented by the event is stored in rx.buf[rx.offset] to
+ * rx.buf[rx.offset+rx.len].  That is, the length is relative to the offset.
+ */
 struct uart_event_rx {
 	/** @brief Pointer to current buffer. */
 	u8_t *buf;
-	/** @brief Offset from buffer start to currently received data. */
+	/** @brief Currently received data offset in bytes. */
 	size_t offset;
-	/** @brief Number of bytes received. */
+	/** @brief Number of new bytes received. */
 	size_t len;
 };
 
@@ -225,10 +230,6 @@ struct uart_event {
  */
 typedef void (*uart_callback_t)(struct uart_event *evt, void *user_data);
 
-#ifdef CONFIG_PCI
-#include <drivers/pci/pci.h>
-#include <drivers/pci/pci_mgr.h>
-#endif
 /**
  * @brief Options for @a UART initialization.
  */
@@ -274,6 +275,7 @@ enum uart_config_data_bits {
 	UART_CFG_DATA_BITS_6,
 	UART_CFG_DATA_BITS_7,
 	UART_CFG_DATA_BITS_8,
+	UART_CFG_DATA_BITS_9,
 };
 
 /**
@@ -332,11 +334,7 @@ struct uart_device_config {
 
 	u32_t sys_clk_freq;
 
-#ifdef CONFIG_PCI
-	struct pci_dev_info  pci_dev;
-#endif /* CONFIG_PCI */
-
-#ifdef CONFIG_UART_INTERRUPT_DRIVEN
+#if defined(CONFIG_UART_INTERRUPT_DRIVEN) || defined(CONFIG_UART_ASYNC_API)
 	uart_irq_config_func_t	irq_config_func;
 #endif
 };
@@ -736,6 +734,9 @@ static inline int uart_fifo_fill(struct device *dev, const u8_t *tx_data,
  * detected, uart_fifo_read() must be called until it reads all
  * available data in the FIFO (i.e. until it returns less data
  * than was requested).
+ *
+ * Note that the calling context only applies to physical UARTs and
+ * no to the virtual ones found in USB CDC ACM code.
  *
  * @param dev UART device structure.
  * @param rx_data Data container.

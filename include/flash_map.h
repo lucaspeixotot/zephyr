@@ -76,9 +76,9 @@ struct flash_sector {
 };
 
 /**
- * @brief Retrieve partitions flash area form the flash_mpa.
+ * @brief Retrieve partitions flash area from the flash_map.
  *
- * Function Retrieves flash_area form flash_map for given partition.
+ * Function Retrieves flash_area from flash_map for given partition.
  *
  * @param[in]  id ID of the flash partition.
  * @param[out] fa Pointer which has to reference flash_area. If
@@ -171,6 +171,24 @@ u8_t flash_area_align(const struct flash_area *fa);
  */
 int flash_area_get_sectors(int fa_id, u32_t *count,
 			   struct flash_sector *sectors);
+
+/**
+ * Flash map iteration callback
+ *
+ * @param fa flash area
+ * @param user_data User supplied data
+ *
+ */
+typedef void (*flash_area_cb_t)(const struct flash_area *fa,
+				void *user_data);
+
+/**
+ * Iterate over flash map
+ *
+ * @param user_cb User callback
+ * @param user_data User supplied data
+ */
+void flash_area_foreach(flash_area_cb_t user_cb, void *user_data);
 
 /**
  * Check whether given flash area has supporting flash driver

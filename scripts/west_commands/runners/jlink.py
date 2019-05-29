@@ -4,9 +4,11 @@
 
 '''Runner for debugging with J-Link.'''
 
+import argparse
 import os
 import tempfile
 import sys
+import shutil
 
 from west import log
 from runners.core import ZephyrBinaryRunner, RunnerCaps, \
@@ -15,13 +17,17 @@ from runners.core import ZephyrBinaryRunner, RunnerCaps, \
 DEFAULT_JLINK_EXE = 'JLink.exe' if sys.platform == 'win32' else 'JLinkExe'
 DEFAULT_JLINK_GDB_PORT = 2331
 
+class ToggleAction(argparse.Action):
+
+    def __call__(self, parser, args, ignored, option):
+        setattr(args, self.dest, not option.startswith('--no-'))
 
 class JLinkBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for the J-Link GDB server.'''
 
     def __init__(self, cfg, device,
                  commander=DEFAULT_JLINK_EXE,
-                 flash_addr=0x0, erase=True,
+                 flash_addr=0x0, erase=True, reset_after_load=False,
                  iface='swd', speed='auto',
                  gdbserver='JLinkGDBServer', gdb_port=DEFAULT_JLINK_GDB_PORT,
                  tui=False):
@@ -33,7 +39,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         self.commander = commander
         self.flash_addr = flash_addr
         self.erase = erase
-        self.gdbserver_cmd = [gdbserver]
+        self.reset_after_load = reset_after_load
+        self.gdbserver = gdbserver
         self.iface = iface
         self.speed = speed
         self.gdb_port = gdb_port
@@ -69,6 +76,12 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                             help='J-Link Commander, default is JLinkExe')
         parser.add_argument('--erase', default=False, action='store_true',
                             help='if given, mass erase flash before loading')
+        parser.add_argument('--reset-after-load', '--no-reset-after-load',
+                            dest='reset_after_load', nargs=0,
+                            action=ToggleAction,
+                            help='reset after loading? (default: no)')
+
+        parser.set_defaults(reset_after_load=False)
 
     @classmethod
     def create(cls, cfg, args):
@@ -77,6 +90,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         return JLinkBinaryRunner(cfg, args.device,
                                  commander=args.commander,
                                  flash_addr=flash_addr, erase=args.erase,
+                                 reset_after_load=args.reset_after_load,
                                  iface=args.iface, speed=args.speed,
                                  gdbserver=args.gdbserver,
                                  gdb_port=args.gdb_port,
@@ -85,8 +99,12 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
     def print_gdbserver_message(self):
         log.inf('J-Link GDB server running on port {}'.format(self.gdb_port))
 
+    def check_cmd(self, cmd):
+        if shutil.which(cmd) is None:
+            log.die('{} is not installed or cannot be found'.format(cmd))
+
     def do_run(self, command, **kwargs):
-        server_cmd = (self.gdbserver_cmd +
+        server_cmd = ([self.gdbserver] +
                       ['-select', 'usb', # only USB connections supported
                        '-port', str(self.gdb_port),
                        '-if', self.iface,
@@ -98,9 +116,11 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         if command == 'flash':
             self.flash(**kwargs)
         elif command == 'debugserver':
+            self.check_cmd(self.gdbserver)
             self.print_gdbserver_message()
             self.check_call(server_cmd)
         else:
+            self.check_cmd(self.gdbserver)
             if self.gdb_cmd is None:
                 raise ValueError('Cannot debug; gdb is missing')
             if self.elf_name is None:
@@ -113,10 +133,14 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                 client_cmd += ['-ex', 'monitor halt',
                                '-ex', 'monitor reset',
                                '-ex', 'load']
+                if self.reset_after_load:
+                    client_cmd += ['-ex', 'monitor reset']
+
             self.print_gdbserver_message()
             self.run_server_and_client(server_cmd, client_cmd)
 
     def flash(self, **kwargs):
+        self.check_cmd(self.commander)
         if self.bin_name is None:
             raise ValueError('Cannot flash; bin_name is missing')
 
@@ -127,6 +151,9 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
 
         lines.append('loadfile {} 0x{:x}'.format(self.bin_name,
                                                  self.flash_addr))
+        if self.reset_after_load:
+            lines.append('r') # Reset and halt the target
+
         lines.append('g') # Start the CPU
         lines.append('q') # Close the connection and quit
 

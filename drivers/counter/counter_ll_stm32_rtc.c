@@ -275,10 +275,14 @@ static int rtc_stm32_init(struct device *dev)
 
 #else /* CONFIG_COUNTER_RTC_STM32_CLOCK_LSE */
 
-#ifndef(CONFIG_SOC_SERIES_STM32F4X)
+#if !defined(CONFIG_SOC_SERIES_STM32F4X) &&	\
+	!defined(CONFIG_SOC_SERIES_STM32F2X)
+
 	LL_RCC_LSE_SetDriveCapability(
 		CONFIG_COUNTER_RTC_STM32_LSE_DRIVE_STRENGTH);
-#endif /* !CONFIG_SOC_SERIES_STM32F4X */
+
+#endif /* !CONFIG_SOC_SERIES_STM32F4X && !CONFIG_SOC_SERIES_STM32F2X */
+
 	LL_RCC_LSE_Enable();
 
 	/* Wait until LSE is ready */
@@ -320,7 +324,7 @@ static const struct rtc_stm32_config rtc_config = {
 	.counter_info = {
 		.max_top_value = UINT32_MAX,
 		.freq = 1,
-		.count_up = true,
+		.flags = COUNTER_CONFIG_INFO_COUNT_UP,
 		.channels = 1,
 	},
 	.pclken = {

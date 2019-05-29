@@ -15,15 +15,18 @@
 #define MBEDTLS_PLATFORM_C
 #define MBEDTLS_PLATFORM_MEMORY
 #define MBEDTLS_MEMORY_BUFFER_ALLOC_C
-#define MBEDTLS_PLATFORM_NO_STD_FUNCTIONS
 #define MBEDTLS_PLATFORM_EXIT_ALT
 #define MBEDTLS_NO_PLATFORM_ENTROPY
 #define MBEDTLS_NO_DEFAULT_ENTROPY_SOURCES
-#define MBEDTLS_PLATFORM_PRINTF_ALT
-#define MBEDTLS_PLATFORM_SNPRINTF_ALT
 
 #if defined(CONFIG_MBEDTLS_HAVE_ASM)
 #define MBEDTLS_HAVE_ASM
+#endif
+
+/* If we build with POSIX API, automatically use time(), etc. */
+#if defined(CONFIG_POSIX_API)
+#define MBEDTLS_HAVE_TIME
+#define MBEDTLS_HAVE_TIME_DATE
 #endif
 
 #if defined(CONFIG_MBEDTLS_TEST)
@@ -235,12 +238,20 @@
 #define MBEDTLS_SHA256_C
 #endif
 
+#if defined(CONFIG_MBEDTLS_SHA256_SMALLER)
+#define MBEDTLS_SHA256_SMALLER
+#endif
+
 #if defined(CONFIG_MBEDTLS_MAC_SHA512_ENABLED)
 #define MBEDTLS_SHA512_C
 #endif
 
 #if defined(CONFIG_MBEDTLS_MAC_POLY1305_ENABLED)
 #define MBEDTLS_POLY1305_C
+#endif
+
+#if defined(CONFIG_MBEDTLS_MAC_CMAC_ENABLED)
+#define MBEDTLS_CMAC_C
 #endif
 
 /* mbedTLS modules */
@@ -265,6 +276,14 @@
 
 #if defined(CONFIG_MBEDTLS_GENPRIME_ENABLED)
 #define MBEDTLS_GENPRIME
+#endif
+
+#if defined(CONFIG_MBEDTLS_ENTROPY_ENABLED)
+#define MBEDTLS_ENTROPY_C
+#endif
+
+#if defined(CONFIG_MBEDTLS_SSL_EXPORT_KEYS)
+#define MBEDTLS_SSL_EXPORT_KEYS
 #endif
 
 /* Automatic dependencies */

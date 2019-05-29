@@ -20,7 +20,7 @@ extern "C" {
 #error "Logger does not support 64 bit architecture."
 #endif
 
-#if !CONFIG_LOG
+#ifndef CONFIG_LOG
 #define CONFIG_LOG_DEFAULT_LEVEL 0
 #define CONFIG_LOG_DOMAIN_ID 0
 #define CONFIG_LOG_MAX_LEVEL 0
@@ -330,7 +330,7 @@ extern "C" {
 
 #define LOG_FILTER_FIRST_BACKEND_SLOT_IDX 1
 
-#if CONFIG_LOG_RUNTIME_FILTERING
+#ifdef CONFIG_LOG_RUNTIME_FILTERING
 #define LOG_RUNTIME_FILTER(_filter) \
 	LOG_FILTER_SLOT_GET(&(_filter)->filters, LOG_FILTER_AGGR_SLOT_IDX)
 #else
@@ -542,6 +542,21 @@ bool log_is_strdup(void *buf);
  * @param buf Buffer.
  */
 void log_free(void *buf);
+
+/**
+ * @brief Get maximal number of simultaneously allocated buffers for string
+ *	  duplicates.
+ *
+ * Value can be used to determine pool size.
+ */
+u32_t log_get_strdup_pool_utilization(void);
+
+/**
+ * @brief Get length of the longest string duplicated.
+ *
+ * Value can be used to determine buffer size in the string duplicates pool.
+ */
+u32_t log_get_strdup_longest_string(void);
 
 /** @brief Indicate to the log core that one log message has been dropped.
  */
